@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Spell Juliana!</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #f0f9ff;
+      touch-action: none;
+    }
+    .dragging {
+      opacity: 0.5;
+      transform: scale(1.1) rotate(2deg);
+    }
+    .drop-hover {
+      background-color: #e0f2fe;
+      border-color: #3b82f6;
+    }
+  </style>
+</head>
+<body class="flex flex-col items-center justify-center min-h-screen p-4">
+  <h1 class="text-3xl font-bold mb-6 text-blue-800">Spell Juliana!</h1>
+
+  <div id="scrambled-letters" class="flex flex-wrap gap-4 justify-center mb-6"></div>
+
+  <div id="drop-zones" class="flex gap-4 mb-6"></div>
+
+  <div class="flex gap-4 mb-4">
+    <button onclick="checkAnswer()" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded">
+      Check My Name!
+    </button>
+    <button onclick="resetGame()" class="bg-gray-400 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded">
+      Start Over
+    </button>
+  </div>
+
+  <div id="message" class="text-center text-lg font-semibold mt-2"></div>
+
+  <script>
+    const NAME = 'Juliana';
+    const scrambledContainer = document.getElementById('scrambled-letters');
+    const dropZonesContainer = document.getElementById('drop-zones');
+    const messageEl = document.getElementById('message');
+    let speech = window.speechSynthesis;
+
+    function shuffle(array) {
+      for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+      }
+      return array;
+    }
+
+    function createLetterCard(letter, id) {
+      const div = document.createElement('div');
+      div.className = 'letter-card w-16 h-20 bg-white text-blue-800 text-3xl font-bold flex items-center justify-center rounded shadow cursor-pointer';
+      div.textContent = letter;
+      div.draggable = true;
+      div.id = id;
+      div.dataset.letter = letter;
+
+      // Events
+      div.addEventListener('dragstart', handleDragStart);
+      div.addEventListener('dragend', handleDragEnd);
+      div.addEventListener('touchstart', handleTouchStart, { passive: true });
+
+      return div;
+    }
+
+    function createDropZone(index) {
+      const div = document.createElement('div');
+      div.className = 'drop-zone w-16 h-20 bg-blue-100 text-2xl text-gray-400 font-bold flex items-center justify-center rounded border-2 border-dashed';
+      div.dataset.index = index;
+      div.addEventListener('dragover', e => e.preventDefault());
+      div.addEventListener('drop', handleDrop);
+      div.addEventListener('dragenter', () => div.classList.add('drop-hover'));
+      div.addEventListener('dragleave', () => div.classList.remove('drop-hover'));
+      return div;
+    }
+
+    function handleDragStart(e) {
+      e.dataTransfer.setData('text/plain', e.target.id);
+      setTimeout(() => e.target.classList.add('dragging'), 0);
+    }
+
+    function handleDragEnd(e) {
+      e.target.classList.remove('dragging');
+    }
+
+    function handleDrop(e) {
+      e.preventDefault();
+      e.currentTarget.classList.remove('drop-hover');
+      const draggedId = e.dataTransfer.getData('text/plain');
+      const draggedEl = document.getElementById(draggedId);
+
+      if (e.currentTarget.firstChild) {
+        const currentChild = e.currentTarget.firstChild;
+        const parent = draggedEl.parentElement;
+        e.currentTarget.replaceChild(draggedEl, currentChild);
+        parent.appendChild(currentChild);
+      } else {
+        e.currentTarget.appendChild(draggedEl);
+      }
+    }
+
+    function handleTouchStart(e) {
+      const original = e.target;
+      const clone = original.cloneNode(true);
+      clone.style.position = 'absolute';
+      clone.style.pointerEvents = 'none';
+      clone.style.zIndex = 1000;
+      clone.id = 'clone';
+      document.body.appendChild(clone);
+
+      function moveAt(pageX, pageY) {
+        clone.style.left = pageX - clone.offsetWidth / 2 + 'px';
+        clone.style.top = pageY - clone.offsetHeight / 2 + 'px';
+      }
+
+      function onTouchMove(event) {
+        const touch = event.touches[0];
+        moveAt(touch.pageX, touch.pageY);
+      }
+
+      function onTouchEnd(event) {
+        clone.remove();
+        const touch = event.changedTouches[0];
+        const dropZone = document.elementFromPoint(touch.clientX, touch.clientY);
+        if (dropZone && dropZone.classList.contains('drop-zone')) {
+          if (dropZone.firstChild) {
+            const temp = dropZone.firstChild;
+            scrambledContainer.appendChild(temp);
+          }
+          dropZone.appendChild(original);
+        }
+        document.removeEventListener('touchmove', onTouchMove);
+        document.removeEventListener('touchend', onTouchEnd);
+      }
+
+      moveAt(e.touches[0].pageX, e.touches[0].pageY);
+      document.addEventListener('touchmove', onTouchMove);
+      document.addEventListener('touchend', onTouchEnd);
+    }
+
+    function checkAnswer() {
+      const result = Array.from(dropZonesContainer.children).map(zone => zone.firstChild?.dataset.letter || '');
+      if (result.includes('')) {
+        showMessage('Please fill all the boxes!', 'text-orange-600');
+        return;
+      }
+      if (result.join('') === NAME) {
+        showMessage(`Good thinking, ${NAME}! You spelled your name! 🎉`, 'text-green-600');
+        animateSuccess();
+        speakMessage(`Good thinking, ${NAME}! You spelled your name!`);
+      } else {
+        showMessage("Oops, those letters aren't in the right order. Keep trying!", 'text-red-600');
+        speakMessage("Oops, those letters aren't in the right order. Keep trying!");
+      }
+    }
+
+    function animateSuccess() {
+      dropZonesContainer.querySelectorAll('.letter-card').forEach(card => {
+        card.classList.add('animate-bounce');
+        setTimeout(() => card.classList.remove('animate-bounce'), 1000);
+      });
+    }
+
+    function speakMessage(text) {
+      if (!('speechSynthesis' in window)) return console.log('Speech synthesis not supported.');
+      speech.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      const voices = speech.getVoices().filter(v => v.lang.startsWith('en') && !v.name.includes('Google Translate'));
+      utterance.voice = voices[0] || null;
+      speech.speak(utterance);
+    }
+
+    function showMessage(msg, styleClass) {
+      messageEl.textContent = msg;
+      messageEl.className = `mt-2 text-center text-lg font-semibold ${styleClass}`;
+    }
+
+    function resetGame() {
+      speech.cancel();
+      scrambledContainer.innerHTML = '';
+      dropZonesContainer.innerHTML = '';
+      messageEl.textContent = '';
+
+      const letters = shuffle(NAME.split(''));
+      letters.forEach((letter, i) => {
+        scrambledContainer.appendChild(createLetterCard(letter, 'card-' + i));
+      });
+
+      for (let i = 0; i < NAME.length; i++) {
+        dropZonesContainer.appendChild(createDropZone(i));
+      }
+    }
+
+    resetGame();
+  </script>
+</body>
+</html>
